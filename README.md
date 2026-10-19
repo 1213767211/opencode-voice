@@ -95,9 +95,62 @@
 ## 技术说明
 
 - 语音引擎:[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) v1.13.8(Windows / macOS / Linux 三平台)
-- 识别模型:int8 量化中文模型(约 228 MB,随包分发,纯离线)
+- 识别模型:SenseVoice(中/英/日/韩/粤),int8 量化(约 228 MB,随包分发,纯离线)
 - 补丁方式:解包 `app.asar` → 注入 `out/voice` 语音模块并追加入口代码 → 重新打包,原文件备份为 `app.asar.bak-voice`
 - 修复机制:Windows 计划任务 / macOS LaunchAgent / Linux systemd 用户定时器,每 10 分钟检查补丁完整性
+
+## 开发与构建(给想改的人)
+
+### 目录结构
+
+| 路径 | 说明 |
+| --- | --- |
+| `patch/out/voice/` | 语音模块源码:主进程逻辑(`main.js`)、输入框麦克风按钮与状态胶囊(`button-inject.js`)、录音窗口(`overlay.js` / `overlay.html`) |
+| `patch/append-content.js` | 追加到 `out/main/index.js` 末尾的入口代码 |
+| `tools/patch-app.mjs` | 打补丁工具:解包 asar → 注入源码 → 重打包,支持备份/回滚/校验 |
+| `tools/check-patched.mjs` | 检查某个 `app.asar` 是否已包含语音模块(退出码 0=已打) |
+| `share/` | 三个平台的一键安装 / 卸载 / 修复脚本(最终用户使用的就是这些) |
+| `build/build-share.ps1` | 组装三平台发布包并打 zip(Windows 上运行,内附路径为作者本机示例) |
+| `dev/` | 开发机部署脚本(源码直接部署到本机 OpenCode,路径可按需修改) |
+
+### 工作原理
+
+1. `patch-app.mjs` 解包 OpenCode 的 `resources/app.asar`;
+2. 把 `patch/out/voice/` 复制进 `out/voice/`,并把 `append-content.js` 追加到 `out/main/index.js`(带 `// ==oc-voice-appended==` 标记,可重复注入);
+3. 重打包并替换,原文件备份为 `app.asar.bak-voice`;
+4. 应用启动后语音模块注册全局快捷键、录音、调用 `sherpa-onnx-offline` 识别并把文字插入输入框;
+5. `share/` 安装器负责探测安装目录、复制引擎/模型、打补丁、注册后台修复任务(OpenCode 更新后自动重打)。
+
+### 自己打补丁 / 重新打包
+
+```bash
+# 依赖:node,先执行 npm i @electron/asar(tools/package.json 已声明)
+node tools/patch-app.mjs --app-asar "/path/to/resources/app.asar" --patch ./patch
+```
+
+```powershell
+# 重新组装三平台发布包(需先准备引擎与模型,脚本内路径按实际情况修改)
+powershell -ExecutionPolicy Bypass -File build\build-share.ps1
+```
+
+### 引擎与模型来源
+
+- 引擎 sherpa-onnx v1.13.8(发布包已内置):
+  - Windows:`https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-x64-shared-MT-Release.tar.bz2`
+  - Linux:`.../v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2`
+  - macOS:`.../v1.13.8/sherpa-onnx-v1.13.8-osx-universal2-shared.tar.bz2`
+- 模型 SenseVoice(zh/en/ja/ko/yue):`model.int8.onnx`(239,239,841 字节)+ `tokens.txt`
+  - 来源:`https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17`(国内可用 `https://hf-mirror.com/` 相同路径)
+
+### 自定义
+
+快捷键 / 语言 / 线程数 / 单次录音上限等改用户数据目录下的 `config.json`(见上「数据目录」):
+
+```json
+{ "hotkey": "Control+Alt+Space", "language": "auto", "threads": 0, "maxSeconds": 120 }
+```
+
+界面相关:录音胶囊在 `patch/out/voice/button-inject.js`(`buildChip` / `updateChip`),样式复制自 OpenCode 自带的 `button-v2` 组件,自动跟随主题。
 
 ## 免责声明
 
