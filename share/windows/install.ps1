@@ -130,7 +130,9 @@ function Close-App([string]$Dir) {
 
 function Invoke-NodeTool([string]$NodeExe, [string[]]$ToolArgs) {
   $prev = $env:ELECTRON_RUN_AS_NODE
+  $prevNoAsar = $env:ELECTRON_NO_ASAR
   $env:ELECTRON_RUN_AS_NODE = "1"
+  $env:ELECTRON_NO_ASAR = "1"
   try {
     if ($Quiet) {
       & $NodeExe @ToolArgs 2>&1 | Out-Null
@@ -141,6 +143,8 @@ function Invoke-NodeTool([string]$NodeExe, [string[]]$ToolArgs) {
   } finally {
     if ($null -eq $prev) { Remove-Item Env:\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue }
     else { $env:ELECTRON_RUN_AS_NODE = $prev }
+    if ($null -eq $prevNoAsar) { Remove-Item Env:\ELECTRON_NO_ASAR -ErrorAction SilentlyContinue }
+    else { $env:ELECTRON_NO_ASAR = $prevNoAsar }
   }
 }
 
