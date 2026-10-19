@@ -152,6 +152,10 @@ powershell -ExecutionPolicy Bypass -File build\build-share.ps1
 
 界面相关:录音胶囊在 `patch/out/voice/button-inject.js`(`buildChip` / `updateChip`),样式复制自 OpenCode 自带的 `button-v2` 组件,自动跟随主题。
 
+## 许可证
+
+本项目基于 [MIT License](LICENSE) 开源:可自由使用、修改、分发,保留版权声明即可。
+
 ## 免责声明
 
 本项目为非官方补丁,与 OpenCode 官方无关。修改应用文件存在一定风险(已提供备份与一键还原)。使用即表示自行承担风险。
