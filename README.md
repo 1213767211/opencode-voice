@@ -156,6 +156,8 @@ powershell -ExecutionPolicy Bypass -File build\build-share.ps1
 
 本项目基于 [MIT License](LICENSE) 开源:可自由使用、修改、分发,保留版权声明即可。
 
+## 社区认可
+[LINUX DO](https://linux.do/) --「新的理想型社区」，本项目在 LINUX DO 社区进行开源推广，感谢佬友们的支持与反馈。
 ## 免责声明
 
 本项目为非官方补丁,与 OpenCode 官方无关。修改应用文件存在一定风险(已提供备份与一键还原)。使用即表示自行承担风险。
