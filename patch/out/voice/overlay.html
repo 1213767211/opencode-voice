@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenCode 语音输入</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        user-select: none;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+        font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+      }
+      #pill {
+        position: absolute;
+        inset: 10px 12px 12px 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 12px;
+        border-radius: 16px;
+        background: rgba(18, 18, 24, 0.94);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        box-shadow: none;
+        color: #f4f4f6;
+        cursor: pointer;
+      }
+      #mic {
+        position: relative;
+        width: 36px;
+        height: 36px;
+        flex: 0 0 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(239, 68, 68, 0.16);
+        transition: background 0.2s;
+      }
+      #mic svg {
+        width: 18px;
+        height: 18px;
+        fill: #ef4444;
+        transition: fill 0.2s;
+      }
+      #mic.listening::after {
+        content: "";
+        position: absolute;
+        inset: -5px;
+        border-radius: 50%;
+        border: 2px solid rgba(239, 68, 68, 0.55);
+        animation: pulse 1.4s ease-out infinite;
+      }
+      #mic.transcribing {
+        background: rgba(245, 158, 11, 0.16);
+      }
+      #mic.transcribing svg {
+        fill: #f59e0b;
+      }
+      #mic.done {
+        background: rgba(34, 197, 94, 0.18);
+      }
+      #mic.done svg {
+        fill: #22c55e;
+      }
+      #mic.error {
+        background: rgba(249, 115, 22, 0.18);
+      }
+      #mic.error svg {
+        fill: #f97316;
+      }
+      @keyframes pulse {
+        0% {
+          transform: scale(0.85);
+          opacity: 0.9;
+        }
+        100% {
+          transform: scale(1.25);
+          opacity: 0;
+        }
+      }
+      #mid {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      #status {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #hint {
+        margin-top: 2px;
+        font-size: 11px;
+        color: rgba(244, 244, 246, 0.55);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #spinner {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid rgba(245, 158, 11, 0.25);
+        border-top-color: #f59e0b;
+        animation: spin 0.8s linear infinite;
+        display: none;
+        flex: 0 0 14px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      #bars {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        height: 20px;
+        flex: 0 0 auto;
+      }
+      #bars i {
+        width: 3px;
+        height: 4px;
+        border-radius: 2px;
+        background: #ef4444;
+        opacity: 0.9;
+        transition: height 0.08s linear;
+      }
+      #close {
+        flex: 0 0 auto;
+        width: 22px;
+        height: 22px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(244, 244, 246, 0.5);
+        font-size: 12px;
+        line-height: 1;
+      }
+      #close:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+      }
+      .mode-done #status {
+        color: #4ade80;
+      }
+      .mode-error #status {
+        color: #fb923c;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="pill" class="mode-listening">
+      <div id="mic" class="listening">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"
+          />
+        </svg>
+      </div>
+      <div id="mid">
+        <div id="status">正在聆听…</div>
+        <div id="hint">说完停顿片刻自动识别,再点麦克风可结束</div>
+      </div>
+      <div id="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div id="spinner"></div>
+      <div id="close" title="取消">✕</div>
+    </div>
+    <script src="./overlay.js"></script>
+  </body>
+</html>
