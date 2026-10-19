@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="220" viewBox="0 0 900 220">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <rect x="30" y="50" width="120" height="120" rx="30" fill="url(#grad)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round">
+    <rect x="75" y="60" width="30" height="65" rx="15" fill="#ffffff" stroke="none"/>
+    <path d="M125 100 v10 a35 35 0 0 1 -70 0 v-10"/>
+    <path d="M90 145 v15"/>
+  </g>
+  <text x="185" y="112" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif" font-size="46" font-weight="700" fill="#111827">OpenCode 语音输入</text>
+  <text x="188" y="160" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif" font-size="24" fill="#6b7280">离线 · 一键说话 · 自动转写</text>
+</svg>
