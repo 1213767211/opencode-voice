@@ -30,9 +30,11 @@ const DEFAULT_CONFIG = {
 function defaultDataDir() {
   try {
     const exeDir = path.dirname(app.getPath("exe"));
-    const sibling = path.join(path.dirname(exeDir), "voice-data");
-    if (fs.existsSync(path.join(sibling, "engine")) || fs.existsSync(path.join(sibling, "config.json"))) {
-      return sibling;
+    const candidates = [path.join(exeDir, "voice-data"), path.join(path.dirname(exeDir), "voice-data")];
+    for (const dir of candidates) {
+      if (fs.existsSync(path.join(dir, "engine")) || fs.existsSync(path.join(dir, "config.json"))) {
+        return dir;
+      }
     }
   } catch {}
   const home = os.homedir() || "";
@@ -93,7 +95,16 @@ function loadConfig() {
   } catch (error) {
     log("failed to read config", String(error && error.message));
   }
-  if (config.dataDir && typeof config.dataDir === "string") dataDir = config.dataDir;
+  if (config.dataDir && typeof config.dataDir === "string") {
+    dataDir = config.dataDir;
+    try {
+      const file2 = path.join(dataDir, "config.json");
+      if (fs.existsSync(file2)) {
+        const parsed2 = JSON.parse(fs.readFileSync(file2, "utf8"));
+        config = { ...config, ...parsed2 };
+      }
+    } catch {}
+  }
 }
 
 function resolveEngine() {
