@@ -20,7 +20,11 @@ die() {
 }
 
 REPAIR=0
-[[ "${1:-}" == "--repair" ]] && REPAIR=1
+FORCE=0
+for arg in "$@"; do
+  [[ "$arg" == "--repair" ]] && REPAIR=1
+  [[ "$arg" == "--force" ]] && FORCE=1
+done
 
 find_app() {
   local cands=()
@@ -61,6 +65,19 @@ RES="$APP/Contents/Resources"
 ASAR="$RES/app.asar"
 NODE_EXE="$APP/Contents/MacOS/OpenCode"
 [[ -f "$NODE_EXE" ]] || die "未找到可执行文件: $NODE_EXE"
+
+# 已安装检测:版本标记 + 组件 + 补丁都在 => 跳过,避免重复安装
+if [[ $REPAIR == 0 && $FORCE == 0 && -f "$STABLE/.ocv-version" ]] \
+  && [[ "$(cat "$STABLE/.ocv-version" 2>/dev/null | tr -d "[:space:]")" == "2" ]] \
+  && [[ -f "$STABLE/patch/out/voice/main.js" ]] \
+  && ELECTRON_RUN_AS_NODE=1 "$NODE_EXE" "$STABLE/tools/check-patched.mjs" "$ASAR" >/dev/null 2>&1; then
+  log "检测到已安装(补丁已存在),无需重复安装。"
+  echo ""
+  echo "已经安装过了,无需重复安装。"
+  echo "如需强制重装,请运行: bash install-mac.sh --force"
+  read -n 1 -s -r -p "按任意键退出..."
+  exit 0
+fi
 
 if [[ ! -w "$RES" ]]; then
   if [[ $REPAIR == 1 ]]; then
@@ -132,6 +149,7 @@ if ! ELECTRON_RUN_AS_NODE=1 "$NODE_EXE" "$STABLE/tools/check-patched.mjs" "$ASAR
   die "校验失败:补丁未生效"
 fi
 log "补丁已生效"
+echo "2" > "$STABLE/.ocv-version"
 
 # 重新签名(修改 app.asar 后必须重新签名,否则 macOS 会拒绝启动)
 log "正在重新签名..."
