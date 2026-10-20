@@ -1,5 +1,7 @@
 # OpenCode 语音输入插件(离线版)
 
+*在心为志,发言为诗。*
+
 <p align="center"><img src="assets/logo.svg" alt="OpenCode 语音输入插件" width="640"></p>
 
 为 [OpenCode Desktop](https://opencode.ai) 添加**离线语音输入**能力:按下快捷键说出你想说的话,语音在本机识别成文字,自动填入对话框。全部离线运行,不联网、不上传任何语音数据。
