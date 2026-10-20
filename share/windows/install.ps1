@@ -7,14 +7,30 @@ param(
   [switch]$Repair,
   [switch]$NoWatcher,
   [switch]$Quiet,
+  [switch]$Force,
   [string]$AppId = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 $scriptName = "oc-voice-windows"
-if (!$StableDir) { $StableDir = Join-Path $env:LOCALAPPDATA "OpenCodeVoice" }
-$logFile = Join-Path $StableDir "install.log"
+
+# 语音引擎不支持非 ASCII 路径(中文用户名会导致乱码),默认目录必须是纯英文
+function Test-AsciiPath([string]$p) { return ($p -notmatch '[^\x20-\x7E]') }
+
+# 默认数据目录 = OpenCode 安装文件夹下的 voice-data(便于集中管理);路径含中文时改用 ProgramData
+function Resolve-StableDir([string]$AppDir) {
+  $inApp = Join-Path $AppDir "voice-data"
+  if (Test-AsciiPath $inApp) { return $inApp }
+  $candidates = @()
+  $candidates += (Join-Path $env:ProgramData "OpenCodeVoice")
+  if ($env:PUBLIC) { $candidates += (Join-Path $env:PUBLIC "OpenCodeVoice") }
+  $candidates += (Join-Path $env:LOCALAPPDATA "OpenCodeVoice")
+  foreach ($c in $candidates) { if (Test-AsciiPath $c) { return $c } }
+  return (Join-Path $env:LOCALAPPDATA "OpenCodeVoice")
+}
+
+$logFile = $null
 
 function Write-Log([string]$Message) {
   $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
@@ -62,8 +78,9 @@ function Test-AppDir([string]$Dir) {
 
 function Find-AppDir {
   $candidates = @()
-  $savedFile = Join-Path $StableDir "appdir.txt"
-  if (Test-Path -LiteralPath $savedFile) {
+  $savedFile = $null
+  if ($StableDir) { $savedFile = Join-Path $StableDir "appdir.txt" }
+  if ($savedFile -and (Test-Path -LiteralPath $savedFile)) {
     $saved = (Get-Content -LiteralPath $savedFile -Raw -ErrorAction SilentlyContinue)
     if ($saved) { $candidates += $saved.Trim() }
   }
@@ -169,8 +186,57 @@ $AppDir = (Resolve-Path -LiteralPath $AppDir).Path
 if (!(Test-AppDir $AppDir)) { Fail "不是有效的 OpenCode 目录: $AppDir" }
 Write-Log "OpenCode 目录: $AppDir"
 
+if (!$StableDir) { $StableDir = Resolve-StableDir $AppDir }
+$logFile = Join-Path $StableDir "install.log"
+if (!(Test-AsciiPath $StableDir)) {
+  if ($Repair) { exit 0 }
+  Fail "语音数据目录不能包含中文或特殊字符: $StableDir`n请改用纯英文路径,例如 D:\OpenCodeVoice"
+}
+Write-Log "语音数据目录: $StableDir"
+
 $resources = Join-Path $AppDir "resources"
 $asarPath = Join-Path $resources "app.asar"
+
+function Install-Watcher {
+  if ($NoWatcher) { return }
+  try {
+    $repairScript = Join-Path $StableDir "tools\repair.ps1"
+    $taskName = "OpenCodeVoiceRepair"
+    $action = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$repairScript`""
+    $extra = @()
+    if (Test-Admin) { $extra = @("/RL", "HIGHEST") }
+    & schtasks.exe /Create /F /TN $taskName /SC MINUTE /MO 10 /TR $action @extra | Out-Null
+    if ($LASTEXITCODE -eq 0) { Write-Log "已安装自动修复任务(每10分钟检查一次,更新后自动还原语音功能)" }
+    else { Write-Log "提示: 自动修复任务创建失败(exit $LASTEXITCODE),更新后如语音消失请重新运行安装包" }
+  } catch { Write-Log ("提示: 自动修复任务创建异常: " + $_.Exception.Message) }
+}
+
+# 已安装检测:补丁还在且组件齐全 => 直接跳过,避免重复安装
+if (!$Repair -and !$Force) {
+  $checkTool = Join-Path $PSScriptRoot "tools\check-patched.mjs"
+  if (Test-Path -LiteralPath $checkTool) {
+    $nodeExe0 = Get-NodeExe $AppDir
+    $patchOk = $false
+    if ($nodeExe0) { $patchOk = ((Invoke-NodeTool $nodeExe0 @($checkTool, $asarPath)) -eq 0) }
+    $dirOk = (Test-Path -LiteralPath (Join-Path $StableDir "patch\out\voice\main.js"))
+    $verOk = $false
+    $verFile = Join-Path $StableDir ".ocv-version"
+    if (Test-Path -LiteralPath $verFile) {
+      try { $verOk = ((Get-Content -LiteralPath $verFile -Raw -ErrorAction SilentlyContinue).Trim() -eq "2") } catch {}
+    }
+    if ($patchOk -and $dirOk -and $verOk) {
+      Write-Log "检测到已安装(补丁已存在),无需重复安装。"
+      Install-Watcher
+      if (!$Quiet) {
+        Write-Host ""
+        Write-Host "已经安装过了,无需重复安装。" -ForegroundColor Green
+        Write-Host "语音数据目录: $StableDir"
+        Write-Host "如需强制重装/修复,请运行: 安装.bat -Force"
+      }
+      exit 0
+    }
+  }
+}
 
 # 权限检查(Program Files 需要管理员)
 $needsAdmin = $false
@@ -190,10 +256,14 @@ if ($needsAdmin -and !(Test-Admin)) {
   exit $LASTEXITCODE
 }
 
-# 关闭应用
-if (!(Close-App $AppDir)) {
-  if ($Repair) { Write-Log "OpenCode 未能关闭,稍后重试"; exit 0 }
-  Fail "无法关闭 OpenCode,请手动退出后重试"
+# 关闭应用(修复模式绝不打扰正在使用的 OpenCode)
+if ($Repair) {
+  $running = @(Get-Process -Name OpenCode -ErrorAction SilentlyContinue | Where-Object {
+    $_.Path -and $_.Path.ToLower().StartsWith($AppDir.ToLower())
+  })
+  if ($running.Count -gt 0) { Write-Log "OpenCode 正在运行,本次跳过(不会关闭应用)"; exit 0 }
+} else {
+  if (!(Close-App $AppDir)) { Fail "无法关闭 OpenCode,请手动退出后重试" }
 }
 
 # 资产来源:正式安装用安装包内 assets;修复时用 StableDir 里已存的副本
@@ -261,28 +331,65 @@ if ($code -ne 0) { Fail "补丁应用失败(exit $code),请把 $logFile 发给�
 
 $checkCode = Invoke-NodeTool $nodeExe @((Join-Path $sourceRoot "tools\check-patched.mjs"), $asarPath)
 if ($checkCode -ne 0) { Fail "校验失败:补丁未生效" }
+Set-Content -LiteralPath (Join-Path $StableDir ".ocv-version") -Value "2" -Encoding Ascii
 
 # 记录目录,供修复任务使用
 Set-Content -LiteralPath (Join-Path $StableDir "appdir.txt") -Value $AppDir -Encoding UTF8
 
 # 安装修复看护(计划任务)
-if (!$NoWatcher) {
-  try {
-    $repairScript = Join-Path $StableDir "tools\repair.ps1"
-    $taskName = "OpenCodeVoiceRepair"
-    $action = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$repairScript`""
-    $extra = @()
-    if (Test-Admin) { $extra = @("/RL", "HIGHEST") }
-    & schtasks.exe /Create /F /TN $taskName /SC MINUTE /MO 10 /TR $action @extra | Out-Null
-    if ($LASTEXITCODE -eq 0) { Write-Log "已安装自动修复任务(每10分钟检查一次,更新后自动还原语音功能)" }
-    else { Write-Log "提示: 自动修复任务创建失败(exit $LASTEXITCODE),更新后如语音消失请重新运行安装包" }
-  } catch { Write-Log ("提示: 自动修复任务创建异常: " + $_.Exception.Message) }
+Install-Watcher
+
+# 若数据目录不在 OpenCode 文件夹内、也不在默认位置,写入引导配置(应用启动时据此找到数据目录)
+$defaultDataDir = Join-Path $env:LOCALAPPDATA "OpenCodeVoice"
+$appLocalDirs = @((Join-Path $AppDir "voice-data"), (Join-Path (Split-Path $AppDir -Parent) "voice-data"))
+$isAppLocal = $false
+foreach ($c in $appLocalDirs) { try { if ($c.TrimEnd([char]"\") -ieq $StableDir.TrimEnd([char]"\")) { $isAppLocal = $true } } catch {} }
+$sameAsDefault = $false
+try { $sameAsDefault = ($defaultDataDir.TrimEnd([char]"\") -ieq $StableDir.TrimEnd([char]"\")) } catch {}
+
+if (!$sameAsDefault -and !$isAppLocal) {
+  New-Item -ItemType Directory -Force -Path $defaultDataDir | Out-Null
+  $bootstrapCfg = @{ hotkey = "Control+Alt+Space"; language = "auto"; threads = 0; maxSeconds = 120 }
+  $stableCfg = Join-Path $StableDir "config.json"
+  if (Test-Path -LiteralPath $stableCfg) {
+    try {
+      $j = Get-Content -LiteralPath $stableCfg -Raw | ConvertFrom-Json
+      foreach ($p in $j.PSObject.Properties) { $bootstrapCfg[$p.Name] = $p.Value }
+    } catch {}
+  }
+  $bootstrapCfg["dataDir"] = $StableDir
+  ($bootstrapCfg | ConvertTo-Json -Compress) | Set-Content -LiteralPath (Join-Path $defaultDataDir "config.json") -Encoding Ascii
+}
+
+# 清理旧位置,避免重复占用磁盘
+$oldDirs = @($defaultDataDir)
+if ($env:ProgramData) { $oldDirs += (Join-Path $env:ProgramData "OpenCodeVoice") }
+if ($env:PUBLIC) { $oldDirs += (Join-Path $env:PUBLIC "OpenCodeVoice") }
+foreach ($old in $oldDirs) {
+  if (!$old -or !(Test-Path -LiteralPath $old)) { continue }
+  $isSame = $false
+  try { $isSame = ($old.TrimEnd([char]"\") -ieq $StableDir.TrimEnd([char]"\")) } catch {}
+  if ($isSame) { continue }
+  if ($isAppLocal) {
+    try { Remove-Item -Recurse -Force -LiteralPath $old -ErrorAction SilentlyContinue } catch {}
+    if (Test-Path -LiteralPath $old) {
+      $left = Get-ChildItem -LiteralPath $old -Force -ErrorAction SilentlyContinue
+      if (!$left) { Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }
+    }
+    if (!(Test-Path -LiteralPath $old)) { Write-Log "已清理旧数据目录: $old" }
+  } else {
+    foreach ($part in @("engine", "model", "patch", "tools", "tmp")) {
+      $p = Join-Path $old $part
+      if (Test-Path -LiteralPath $p) { try { Remove-Item -Recurse -Force -LiteralPath $p -ErrorAction SilentlyContinue } catch {} }
+    }
+  }
 }
 
 Write-Log "安装完成! 打开 OpenCode 后按 Ctrl+Alt+Space 或点输入框右下角麦克风开始说话。"
 if (!$Quiet) {
   Write-Host ""
   Write-Host "安装完成!" -ForegroundColor Green
+  Write-Host "语音数据目录: $StableDir"
   Write-Host "打开 OpenCode,点击输入框右下角的麦克风,或按快捷键 Ctrl+Alt+Space 即可语音输入。"
 }
 exit 0
