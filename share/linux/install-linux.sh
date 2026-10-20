@@ -19,7 +19,11 @@ die() {
 }
 
 REPAIR=0
-[[ "${1:-}" == "--repair" ]] && REPAIR=1
+FORCE=0
+for arg in "$@"; do
+  [[ "$arg" == "--repair" ]] && REPAIR=1
+  [[ "$arg" == "--force" ]] && FORCE=1
+done
 
 find_app() {
   local cands=()
@@ -81,6 +85,28 @@ RES="$APP/resources"
 ASAR="$RES/app.asar"
 NODE_EXE="$(find_exe "$APP")" || die "未在 $APP 找到可执行文件"
 log "可执行文件: $NODE_EXE"
+
+check_patched() {
+  if ELECTRON_RUN_AS_NODE=1 "$NODE_EXE" "$STABLE/tools/check-patched.mjs" "$ASAR" >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v node >/dev/null 2>&1 && node "$STABLE/tools/check-patched.mjs" "$ASAR" >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+# 已安装检测:版本标记 + 组件 + 补丁都在 => 跳过,避免重复安装
+if [[ $REPAIR == 0 && $FORCE == 0 && -f "$STABLE/.ocv-version" ]] \
+  && [[ "$(cat "$STABLE/.ocv-version" 2>/dev/null | tr -d "[:space:]")" == "2" ]] \
+  && [[ -f "$STABLE/patch/out/voice/main.js" ]] \
+  && check_patched; then
+  log "检测到已安装(补丁已存在),无需重复安装。"
+  echo ""
+  echo "已经安装过了,无需重复安装。"
+  echo "如需强制重装,请运行: bash install-linux.sh --force"
+  exit 0
+fi
 
 if [[ ! -w "$RES" ]]; then
   if [[ $REPAIR == 1 ]]; then
@@ -167,6 +193,7 @@ if ! run_node "$STABLE/tools/check-patched.mjs" "$ASAR" >/dev/null 2>&1; then
   die "校验失败:补丁未生效"
 fi
 log "补丁已生效"
+echo "2" > "$STABLE/.ocv-version"
 
 echo "$APP" > "$STABLE/appdir.txt"
 
