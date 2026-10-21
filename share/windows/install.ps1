@@ -200,15 +200,16 @@ $asarPath = Join-Path $resources "app.asar"
 function Install-Watcher {
   if ($NoWatcher) { return }
   try {
-    $repairScript = Join-Path $StableDir "tools\repair.ps1"
-    $taskName = "OpenCodeVoiceRepair"
-    $action = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$repairScript`""
-    $extra = @()
-    if (Test-Admin) { $extra = @("/RL", "HIGHEST") }
-    & schtasks.exe /Create /F /TN $taskName /SC MINUTE /MO 10 /TR $action @extra | Out-Null
-    if ($LASTEXITCODE -eq 0) { Write-Log "已安装自动修复任务(每10分钟检查一次,更新后自动还原语音功能)" }
-    else { Write-Log "提示: 自动修复任务创建失败(exit $LASTEXITCODE),更新后如语音消失请重新运行安装包" }
-  } catch { Write-Log ("提示: 自动修复任务创建异常: " + $_.Exception.Message) }
+    $startup = [Environment]::GetFolderPath("Startup")
+    $vbsPath = Join-Path $startup "OpenCodeVoiceWatch.vbs"
+    $watchScript = Join-Path $StableDir "tools\watch.ps1"
+    $vbs = 'Set sh = CreateObject("WScript.Shell")' + "`r`n" + 'sh.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""' + $watchScript + '""", 0, False' + "`r`n"
+    Set-Content -LiteralPath $vbsPath -Value $vbs -Encoding Ascii
+    & schtasks.exe /Delete /F /TN "OpenCodeVoiceRepair" 2>$null | Out-Null
+    Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($watchScript) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Start-Process -FilePath "wscript.exe" -ArgumentList "`"$vbsPath`"" -WindowStyle Hidden
+    Write-Log "已启用更新监视:仅在 OpenCode 更新后自动修复(不再定时运行)"
+  } catch { Write-Log ("提示: 更新监视创建异常: " + $_.Exception.Message) }
 }
 
 # 已安装检测:补丁还在且组件齐全 => 直接跳过,避免重复安装
