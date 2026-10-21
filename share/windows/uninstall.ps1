@@ -109,9 +109,16 @@ if ($AppDir) {
   Write-Host "跳过恢复 app.asar(未定位到 OpenCode 目录)"
 }
 
-# 4) 删除自动修复任务
-try { & schtasks.exe /Delete /F /TN "OpenCodeVoiceRepair" | Out-Null } catch {}
-Write-Host "已删除自动修复任务"
+# 4) 删除更新监视与旧的自动修复任务
+try { & schtasks.exe /Delete /F /TN "OpenCodeVoiceRepair" 2>$null | Out-Null } catch {}
+try {
+  $startup = [Environment]::GetFolderPath("Startup")
+  $vbsPath = Join-Path $startup "OpenCodeVoiceWatch.vbs"
+  if (Test-Path -LiteralPath $vbsPath) { Remove-Item -LiteralPath $vbsPath -Force -ErrorAction SilentlyContinue }
+  $watchScript = Join-Path $StableDir "tools\watch.ps1"
+  Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($watchScript) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+} catch {}
+Write-Host "已删除更新监视"
 
 # 5) 删除数据目录
 if ($StableDir -and (Test-Path -LiteralPath $StableDir)) {
