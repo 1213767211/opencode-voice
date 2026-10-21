@@ -223,7 +223,7 @@ if (!$Repair -and !$Force) {
     $verOk = $false
     $verFile = Join-Path $StableDir ".ocv-version"
     if (Test-Path -LiteralPath $verFile) {
-      try { $verOk = ((Get-Content -LiteralPath $verFile -Raw -ErrorAction SilentlyContinue).Trim() -eq "2") } catch {}
+      try { $verOk = ((Get-Content -LiteralPath $verFile -Raw -ErrorAction SilentlyContinue).Trim() -eq "3") } catch {}
     }
     if ($patchOk -and $dirOk -and $verOk) {
       Write-Log "检测到已安装(补丁已存在),无需重复安装。"
@@ -332,7 +332,7 @@ if ($code -ne 0) { Fail "补丁应用失败(exit $code),请把 $logFile 发给�
 
 $checkCode = Invoke-NodeTool $nodeExe @((Join-Path $sourceRoot "tools\check-patched.mjs"), $asarPath)
 if ($checkCode -ne 0) { Fail "校验失败:补丁未生效" }
-Set-Content -LiteralPath (Join-Path $StableDir ".ocv-version") -Value "2" -Encoding Ascii
+Set-Content -LiteralPath (Join-Path $StableDir ".ocv-version") -Value "3" -Encoding Ascii
 
 # 记录目录,供修复任务使用
 Set-Content -LiteralPath (Join-Path $StableDir "appdir.txt") -Value $AppDir -Encoding UTF8

@@ -98,7 +98,7 @@ check_patched() {
 
 # 已安装检测:版本标记 + 组件 + 补丁都在 => 跳过,避免重复安装
 if [[ $REPAIR == 0 && $FORCE == 0 && -f "$STABLE/.ocv-version" ]] \
-  && [[ "$(cat "$STABLE/.ocv-version" 2>/dev/null | tr -d "[:space:]")" == "2" ]] \
+  && [[ "$(cat "$STABLE/.ocv-version" 2>/dev/null | tr -d "[:space:]")" == "3" ]] \
   && [[ -f "$STABLE/patch/out/voice/main.js" ]] \
   && check_patched; then
   log "检测到已安装(补丁已存在),无需重复安装。"
@@ -193,7 +193,7 @@ if ! run_node "$STABLE/tools/check-patched.mjs" "$ASAR" >/dev/null 2>&1; then
   die "校验失败:补丁未生效"
 fi
 log "补丁已生效"
-echo "2" > "$STABLE/.ocv-version"
+echo "3" > "$STABLE/.ocv-version"
 
 echo "$APP" > "$STABLE/appdir.txt"
 

@@ -5,6 +5,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+// 补丁版本号:安装器/自动修复脚本据此判断是否需要重新打补丁
+// 1 = 初版, 2 = 数据目录探测修正, 3 = 关闭主窗口后销毁悬浮窗并退出(修复"点图标没反应")
+const OCV_PATCH_VERSION = 3;
+
 const CH = {
   start: "ocv:start",
   stop: "ocv:stop",
@@ -361,9 +365,55 @@ function attachMicButton(win) {
   wc.on("did-finish-load", inject);
 }
 
+// ==oc-voice-zombie-fix== 主窗口关闭后必须退出进程
+// 悬浮窗是一个隐藏的 BrowserWindow,Electron 会认为"还有窗口没关"而不触发退出:
+// 单实例锁被这个后台进程占住,用户再点 OpenCode.exe 时新进程拿不到锁直接静默退出,
+// 老进程又没有任何可见窗口 => 表现为"点了图标完全没反应"。
+// 修复:所有普通窗口都关闭后,先停录音,再销毁悬浮窗,最后退出应用。
+let voiceQuitTimer = null;
+
+function voiceMainWindows() {
+  return BrowserWindow.getAllWindows().filter((win) => win && !win.isDestroyed() && !win.__ocVoice && win !== overlay);
+}
+
+function voiceQuitWhenNoWindow() {
+  if (voiceQuitTimer) return;
+  voiceQuitTimer = setTimeout(() => {
+    voiceQuitTimer = null;
+    try {
+      if (voiceMainWindows().length > 0) return;
+      if (mode !== "idle") cancelListening();
+    } catch {}
+    try {
+      if (overlay && !overlay.isDestroyed()) overlay.destroy();
+    } catch {}
+    overlay = null;
+    app.quit();
+  }, 200);
+}
+
+function hookVoiceQuit(win) {
+  if (!win || win.__ocvQuitHooked) return;
+  win.__ocvQuitHooked = true;
+  win.on("closed", voiceQuitWhenNoWindow);
+}
+
+// 再次双击图标时把已有的主窗口拉回前台(避免"进程在跑但看不到窗口")
+app.on("second-instance", () => {
+  const win = voiceMainWindows()[0];
+  if (!win) return;
+  try {
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+    win.focus();
+  } catch {}
+});
+
 app.on("browser-window-created", (_event, win) => {
   attachMicButton(win);
+  hookVoiceQuit(win);
 });
+for (const win of BrowserWindow.getAllWindows()) hookVoiceQuit(win);
 
 function ensureOverlay() {
   if (overlay && !overlay.isDestroyed()) return overlay;
@@ -810,6 +860,10 @@ app.whenReady().then(() => {
     try {
       globalShortcut.unregisterAll();
     } catch {}
+    try {
+      if (overlay && !overlay.isDestroyed()) overlay.destroy();
+    } catch {}
+    overlay = null;
   });
   if (process.env.OC_VOICE_SELFTEST === "1") void runSelfTest();
 });

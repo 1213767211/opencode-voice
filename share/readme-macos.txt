@@ -15,8 +15,9 @@ OpenCode 语音输入 安装说明(macOS)
   xattr -dr com.apple.quarantine /Applications/OpenCode.app
 
 【OpenCode 更新后麦克风没了怎么办?】
-安装时已注册自动修复(每 10 分钟检查一次),更新后会自动装回;
+安装时已注册自动修复(LaunchAgent 每 10 分钟检查一次),更新后会自动装回;
 若较长时间未恢复,重新运行一次“安装.command”即可。
+从旧版本(v1.0.x)升级时,重新运行一次本安装包即可拿到修复。
 注意:macOS 上 OpenCode 的内置自动更新可能因本地签名而失败,
 如果更新失败,请到官网手动下载新版 OpenCode 安装,然后再运行一次本安装包。
 
